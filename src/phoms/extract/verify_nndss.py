@@ -99,9 +99,7 @@ def pull(disease_col="label"):
             my = int(v["year"].max())
             prior_week = (my, int(v[v["year"] == my]["week"].max()))
         print(f"(comparing against {prior[-1].name})")
-    quality.report(
-        quality.run_all(pd.DataFrame(rows), labels, prior_rows, prior_week)
-    )
+    quality.report(quality.run_all(pd.DataFrame(rows), labels, prior_rows, prior_week))
 
 
 if __name__ == "__main__":
