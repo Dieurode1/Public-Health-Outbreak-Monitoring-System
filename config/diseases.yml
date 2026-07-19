@@ -1,0 +1,25 @@
+# Disease dimension (ADR 6). Adding a disease is a config line plus a backfill,
+# never new code. Ship 2-3 chosen for contrast, not coverage.
+#
+# seasonality      : seasonal | sporadic | respiratory — selects baseline method
+# expected_lag_wks : prior for the nowcast; refined from the observed revision log
+# alert_eligible   : false means ingested and modeled but never fires an alert
+
+cyclosporiasis:
+  nndss_label: Cyclosporiasis
+  seasonality: seasonal
+  expected_lag_wks: 4
+  alert_eligible: true
+  notes: >
+    Anchor disease. Summer-peaking, foodborne, long confirmation lag.
+    Near-zero off-season counts — baseline must degrade gracefully at small
+    denominators or ratio scores explode outside summer.
+
+listeriosis:
+  nndss_label: "Listeriosis"
+  seasonality: sporadic
+  expected_lag_wks: 2
+  alert_eligible: true
+  notes: >
+    Contrast case. Low-count sporadic; tests robustness against small-sample
+    false alarms. Verify the exact NNDSS label string before first ingest.
