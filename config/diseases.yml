@@ -1,12 +1,14 @@
 # Disease dimension (ADR 6). Adding a disease is a config line plus a backfill,
 # never new code. Ship 2-3 chosen for contrast, not coverage.
 #
+# nndss_labels     : exact NNDSS label strings; a list because some diseases
+#                    split by case definition (confirmed/probable)
 # seasonality      : seasonal | sporadic | respiratory — selects baseline method
 # expected_lag_wks : prior for the nowcast; refined from the observed revision log
 # alert_eligible   : false means ingested and modeled but never fires an alert
 
 cyclosporiasis:
-  nndss_label: Cyclosporiasis
+  nndss_labels: [Cyclosporiasis]
   seasonality: seasonal
   expected_lag_wks: 4
   alert_eligible: true
@@ -16,10 +18,17 @@ cyclosporiasis:
     denominators or ratio scores explode outside summer.
 
 listeriosis:
-  nndss_label: "Listeriosis"
+  nndss_labels: ["Listeriosis, Confirmed"]
   seasonality: sporadic
   expected_lag_wks: 2
   alert_eligible: true
   notes: >
     Contrast case. Low-count sporadic; tests robustness against small-sample
-    false alarms. Verify the exact NNDSS label string before first ingest.
+    false alarms.
+    NNDSS splits this into "Listeriosis, Confirmed" and "Listeriosis, Probable".
+    Confirmed-only is the default: it matches how cyclosporiasis is counted and
+    keeps one case definition across diseases. Probable is excluded because
+    reclassification (probable -> confirmed) moves counts without a new case
+    arriving, which is a different change event from a late confirmation and
+    would pollute the lag profile if summed. Revisit only if the backtest shows
+    probables leading confirmed by enough to matter.
