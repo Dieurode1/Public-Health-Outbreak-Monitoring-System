@@ -1,5 +1,14 @@
 """
-Event-lane arrival rate (ADR 2 gate).
+Verification script — do the advisory feeds arrive often enough to need a broker?
+
+The event lane carries Tier 2 corroboration sources: public advisories and
+recalls that raise or damp confidence in an anomaly but never fire an alert
+alone. Measured here:
+
+  FDA recalls    — RSS. Food and drug recall notices, all product categories.
+  CDC outbreaks  — RSS. Multistate foodborne outbreak investigations.
+  USDA FSIS      — API. Meat/poultry recalls and public health alerts;
+                   independent of FDA, so it corroborates rather than echoes.
 
 ADR 2 makes the broker conditional on measurement: >= ~3 items/week justifies
 Redpanda, below that the lane drops to a Dagster sensor. This produces the number.
@@ -10,8 +19,9 @@ Result 2026-07-19: 4.9/wk — passes. Lower bound; FDA's feed truncates at 20
 items so its count is a floor, and FDA alone carries most of the total.
 
 Source notes:
-  HAN has no live feed — the tools.cdc.gov one is dead since 2023 while CDC
-  keeps publishing. Excluded here, ingested via crawl lane instead (ADR 3).
+  HAN (CDC's urgent clinician advisories) has no live feed — the tools.cdc.gov
+  one is dead since 2023 while CDC keeps publishing. Excluded here, ingested via
+  crawl lane instead (ADR 3).
   FSIS uses its recall API, not RSS: full archive plus field_states and
   field_related_to_outbreak, which the corroboration join needs.
   fda.gov and fsis.usda.gov 403 the default requests UA. Browser UA required.

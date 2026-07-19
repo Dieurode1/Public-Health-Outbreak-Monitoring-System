@@ -1,9 +1,11 @@
 """
-NNDSS provisional-revision check (brief §7, gate 1).
+Verification script — does CDC actually revise its published case counts?
 
-The nowcast assumes CDC revises prior weeks as late cases confirm. If prior
-weeks never move between pulls, there is no lag to learn and the revision lane
-is worthless. This proves it — or kills it.
+NNDSS (National Notifiable Diseases Surveillance System) is CDC's weekly count
+of reportable diseases by state and week. Its counts are provisional: as late
+cases are confirmed, CDC rewrites weeks it already published. Those rewrites are
+the signal the nowcast learns from — so if prior weeks never move between pulls,
+the revision lane has nothing to model. This is brief §7, gate 1.
 
     python -m phoms.extract.verify_nndss discover   # find current dataset id
     python -m phoms.extract.verify_nndss schema     # column names (never assume)
