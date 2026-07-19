@@ -28,6 +28,7 @@ Source notes:
 
 See docs/adr/002-event-lane.md.
 """
+
 import datetime
 from collections import Counter
 
@@ -60,15 +61,19 @@ def main():
                 recent += 1
         counts[name] = recent
         floor = " TRUNCATED-floor" if oldest and oldest >= cutoff else ""
-        print(f"{name:<16} {recent:>3}/30d ({recent / WINDOW * 7:.1f}/wk) "
-              f"[{len(feed.entries)} in feed]{floor}")
+        print(
+            f"{name:<16} {recent:>3}/30d ({recent / WINDOW * 7:.1f}/wk) "
+            f"[{len(feed.entries)} in feed]{floor}"
+        )
 
     data = requests.get(FSIS_API, headers=UA, timeout=60).json()
     iso = cutoff.date().isoformat()
     recent = [r for r in data if (r.get("field_recall_date") or "") >= iso]
     counts["fsis_api"] = len(recent)
-    print(f"{'fsis_api':<16} {len(recent):>3}/30d ({len(recent) / WINDOW * 7:.1f}/wk) "
-          f"[{len(data)} total records]")
+    print(
+        f"{'fsis_api':<16} {len(recent):>3}/30d ({len(recent) / WINDOW * 7:.1f}/wk) "
+        f"[{len(data)} total records]"
+    )
 
     total = sum(counts.values())
     print(f"\nCOMBINED: {total}/30d = {total / WINDOW * 7:.1f} items/week")
