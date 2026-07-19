@@ -1,4 +1,4 @@
-[README (10).md](https://github.com/user-attachments/files/30169959/README.10.md)
+[README (14).md](https://github.com/user-attachments/files/30170002/README.14.md)
 <div align="center">
 
 # 🦠 Public Health Outbreak Monitoring System
@@ -8,8 +8,6 @@
 [![Status](https://img.shields.io/badge/status-in%20active%20development-F4A261?style=for-the-badge)](.)
 [![Project](https://img.shields.io/badge/portfolio-capstone-1F4E5F?style=for-the-badge)](.)
 [![License](https://img.shields.io/badge/license-MIT-2A9D8F?style=for-the-badge)](LICENSE)
-
-<br>
 
 ![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Snowflake](https://img.shields.io/badge/Snowflake-29B5E8?style=flat-square&logo=snowflake&logoColor=white)
@@ -124,89 +122,37 @@ If the earliness delta comes back at zero, that is a **reportable finding** abou
 ## 🏗️ Architecture
 
 ```mermaid
-flowchart TB
-    subgraph SOURCES["📡 SOURCES"]
-        direction LR
-        S1["NNDSS<br/>weekly tables"]
-        S2["CDC CFA<br/>epidemic-trend"]
-        S3["FDA CORE<br/>+ state dashboards"]
-        S4["HAN · FDA/USDA<br/>recall feeds"]
-    end
+flowchart LR
+    S["📡 CDC · FDA · state sources"]
+    E["🔌 Ingestion<br/><i>API poll · batch diff · crawl</i>"]
+    R["Redpanda"]
+    S3[("🗄️ S3<br/><i>snapshot-dated</i>")]
+    SF[("Snowflake RAW")]
+    T["⚙️ dbt<br/>STG → INT → MART"]
+    D["🧠 Detection<br/><i>baseline · nowcast · score</i>"]
+    U["🖥️ Console + digest"]
+    G["🎛️ Dagster"]
 
-    subgraph INGEST["🔌 INGESTION LANES"]
-        direction LR
-        L1["<b>API lane</b><br/>scheduled poll"]
-        L2["<b>Revision lane</b><br/>batch diff"]
-        L3["<b>Crawl lane</b><br/>first-seen stamped"]
-        L4["<b>Event lane</b><br/>irregular arrival"]
-    end
-
-    subgraph LAND["🗄️ LANDING + RAW"]
-        direction LR
-        S3B[("S3<br/>snapshot-dated keys<br/><i>never overwrite</i>")]
-        RP{{"Redpanda"}}
-        SF[("Snowflake RAW")]
-    end
-
-    subgraph TRANSFORM["⚙️ dbt TRANSFORM"]
-        direction LR
-        T1["staging"] --> T2["intermediate<br/><i>harmonize · revision history<br/>lag profile · corroboration</i>"]
-    end
-
-    subgraph MARTS["📊 MARTS"]
-        direction LR
-        M1["🟢 baseline"]
-        M2["🔵 nowcast"]
-        M3["🟠 anomaly"]
-        M4["🟣 backtest"]
-    end
-
-    DET["🧠 <b>DETECTION</b><br/>scoring · corroboration modulation<br/><i>no LLM in the alerting path</i>"]
-    PAY["📦 <b>FROZEN PAYLOAD CONTRACT</b><br/>reason code · corroboration count · earliness delta<br/>nowcast band · affected jurisdictions"]
-
-    subgraph SERVE["🖥️ SERVE"]
-        direction LR
-        C1["React console"]
-        C2["Alert digest"]
-    end
-
-    S1 --> L1
-    S1 --> L2
-    S2 --> L1
-    S3 --> L3
-    S4 --> L4
-
-    L1 --> S3B
-    L2 --> S3B
-    L3 --> S3B
-    L4 --> RP
-    RP -->|"Snowpipe<br/>Streaming"| SF
-    S3B --> SF
-    SF --> T1
-    T2 --> M1 & M2 & M3 & M4
-    M1 & M2 & M3 --> DET
-    DET --> PAY
-    PAY --> C1
-    PAY --> C2
-
-    DAG["🎛️ <b>Dagster</b> orchestrates the entire chain"]
-    DAG -.-> INGEST
-    DAG -.-> TRANSFORM
-    DAG -.-> DET
+    S --> E --> S3 --> SF --> T --> D --> U
+    E --> R
+    R -->|"Snowpipe Streaming"| SF
+    G -.-> E
+    G -.-> T
+    G -.-> D
 
     classDef src fill:#E8F4F8,stroke:#1F4E5F,stroke-width:2px,color:#1F4E5F
     classDef lane fill:#FFF4E6,stroke:#F4A261,stroke-width:2px,color:#8A4B08
     classDef store fill:#E7F5EE,stroke:#2A9D8F,stroke-width:2px,color:#14514A
-    classDef mart fill:#F3E8FF,stroke:#8B5CF6,stroke-width:2px,color:#4C1D95
+    classDef dbt fill:#F3E8FF,stroke:#8B5CF6,stroke-width:2px,color:#4C1D95
     classDef core fill:#FFE8E8,stroke:#E76F51,stroke-width:3px,color:#7A2E1A
     classDef serve fill:#E8EEFF,stroke:#4F43DD,stroke-width:2px,color:#2A2496
 
-    class S1,S2,S3,S4 src
-    class L1,L2,L3,L4 lane
-    class S3B,RP,SF,T1,T2 store
-    class M1,M2,M3,M4 mart
-    class DET,PAY,DAG core
-    class C1,C2 serve
+    class S src
+    class E,R lane
+    class S3,SF store
+    class T dbt
+    class D,G core
+    class U serve
 ```
 
 ### 🛤️ Four ingestion lanes, each chosen by what the source actually offers
@@ -225,15 +171,16 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    A["🟢 <b>Seasonal baseline</b><br/><br/>expected count + range<br/>disease × jurisdiction × week-of-year"] 
-    B["🔵 <b>Nowcast</b><br/><br/>lag profile applied to recent weeks<br/>+ uncertainty band"]
-    C["🟠 <b>Anomaly signals</b><br/><br/>score · fired flag · reason code<br/>corroboration count · earliness delta"]
-    D["🟣 <b>Backtest eval</b><br/><br/>replays detection on<br/>point-in-time data"]
+    A["🟢 <b>Baseline</b><br/><i>disease × state × week</i>"]
+    B["🔵 <b>Nowcast</b><br/><i>+ uncertainty band</i>"]
+    C["🟠 <b>Anomaly</b><br/><i>score · reason code</i>"]
+    D["🟣 <b>Backtest</b><br/><i>point-in-time replay</i>"]
+    E["📦 <b>console + digest</b>"]
 
     A --> C
     B --> C
     C --> D
-    C -->|"IS the payload"| E["📦 console + digest"]
+    C -->|"IS the payload"| E
 
     classDef m1 fill:#E7F5EE,stroke:#2A9D8F,stroke-width:2px,color:#14514A
     classDef m2 fill:#E8F4F8,stroke:#1F4E5F,stroke-width:2px,color:#1F4E5F
@@ -255,14 +202,14 @@ flowchart LR
 > In an alerting system, a **bad source is worse than a missing one.**
 
 ```mermaid
-flowchart TB
-    T1["🟩 <b>TIER 1 — DRIVES ALERTS</b><br/>Federal APIs + official state/county/agency pages<br/><i>Crawled only where no API exists</i>"]
-    T2["🟨 <b>TIER 2 — CORROBORATION, NEVER FIRES ALONE</b><br/>Advisory and recall event lane<br/><i>Raises or damps confidence on a Tier 1 signal — never originates one</i>"]
-    T3["🟥 <b>TIER 3 — DELIBERATELY EXCLUDED</b><br/>News aggregators, unverified trackers<br/><i>Named in the README with the reason, not quietly omitted</i>"]
+flowchart LR
+    T1["🟩 <b>Tier 1</b> — drives alerts<br/><i>federal APIs + official pages</i>"]
+    T2["🟨 <b>Tier 2</b> — corroborates<br/><i>advisory/recall event lane</i>"]
+    T3["🟥 <b>Tier 3</b> — excluded<br/><i>news aggregators, unverified trackers</i>"]
 
-    T1 --> ALERT(["🔔 <b>ALERT FIRES</b>"])
-    T2 -.->|"modulates<br/>confidence"| ALERT
-    T3 -.->|"❌ blocked"| ALERT
+    T1 --> A(["🔔 <b>ALERT</b>"])
+    T2 -.->|"modulates"| A
+    T3 -.->|"blocked"| A
 
     classDef t1 fill:#DCFCE7,stroke:#16A34A,stroke-width:2px,color:#14532D
     classDef t2 fill:#FEF9C3,stroke:#CA8A04,stroke-width:2px,color:#713F12
@@ -272,7 +219,7 @@ flowchart TB
     class T1 t1
     class T2 t2
     class T3 t3
-    class ALERT al
+    class A al
 ```
 
 ---
@@ -431,9 +378,9 @@ Deliberately constrained, with the reasoning recorded rather than discovered lat
 │       ├── staging/
 │       ├── intermediate/           # harmonize · revision history · lag profile
 │       └── marts/                  # baseline · nowcast · anomaly · backtest
-├── 🧠 detection/                    # baseline, nowcast, scoring
-├── 🎛️ orchestration/                # Dagster definitions
-├── 🖥️ console/                      # React/Next.js
+├── 🧠 detection/                   # baseline, nowcast, scoring
+├── 🎛️ orchestration/               # Dagster definitions
+├── 🖥️ console/                     # React/Next.js
 └── 🧬 config/
     └── diseases/                   # disease-as-config dimension
 ```
