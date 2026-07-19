@@ -28,6 +28,7 @@ import datetime
 import pathlib
 import sys
 
+import pandas as pd
 import requests
 import yaml
 
@@ -83,9 +84,8 @@ def pull(disease_col="label"):
     print(f"{len(rows)} rows → {out}\n")
 
     # Validate on arrival. Prior snapshots give volume and freshness a baseline.
-    import pandas as pd
-
-    cfg = yaml.safe_load(open("config/diseases.yml"))
+    with open("config/diseases.yml") as f:
+        cfg = yaml.safe_load(f)
     labels = cfg["cyclosporiasis"]["nndss_labels"]
     prior = sorted(snap.glob("nndss_cyclospora_*.csv"))[:-1]
     prior_rows, prior_week = None, None
