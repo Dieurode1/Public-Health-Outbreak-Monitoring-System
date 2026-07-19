@@ -1,4 +1,5 @@
 """Config labels must exist in NNDSS. Catches upstream label renames."""
+
 import pytest
 import yaml
 
@@ -22,7 +23,10 @@ def live_labels():
 
 def test_every_configured_label_exists(cfg, live_labels):
     missing = [
-        (d, lab) for d, meta in cfg.items() for lab in meta["nndss_labels"] if lab not in live_labels
+        (d, lab)
+        for d, meta in cfg.items()
+        for lab in meta["nndss_labels"]
+        if lab not in live_labels
     ]
     assert not missing, f"labels not found in NNDSS: {missing}"
 
