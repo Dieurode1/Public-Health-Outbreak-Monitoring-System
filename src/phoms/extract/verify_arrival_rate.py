@@ -1,61 +1,22 @@
 """
-Pre-build verification #2 — event-lane arrival rate (ADR 2 gate).
+Event-lane arrival rate (ADR 2 gate).
 
-WHY THIS EXISTS
----------------
-ADR 2 makes the event lane's existence conditional on measurement, not on
-wanting a broker on the resume. The rule: if the candidate feeds combined
-deliver a few items a week or more, bursty irregular arrival plus fan-out to
-real consumers (corroboration mart, digest trigger) justifies Redpanda. Below
-that, the lane collapses to a Dagster sensor and the ADR records the cut.
-This script produces the number that decides it.
-
-WHAT IT DOES
-------------
-Counts items published in the trailing 30 days across the candidate Tier 2
-sources, reports each source's rate and the combined weekly rate, and flags
-feeds whose oldest entry falls inside the window (meaning the feed is truncated
-and the count is a floor, not a measurement).
+ADR 2 makes the broker conditional on measurement: >= ~3 items/week justifies
+Redpanda, below that the lane drops to a Dagster sensor. This produces the number.
 
     python -m phoms.extract.verify_arrival_rate
 
-FINDINGS (2026-07-19) — GATE PASSES AT 4.9 items/week
------------------------------------------------------
-  fda_recalls    3.5/wk  RSS, truncated at 20 items -> count is a FLOOR
-  cdc_outbreaks  0.5/wk  RSS
-  fsis_api       0.9/wk  true rate, measured against full 2,011-record archive
-  ------------------------------------------------
-  COMBINED       4.9/wk  (lower bound)
+Result 2026-07-19: 4.9/wk — passes. Lower bound; FDA's feed truncates at 20
+items so its count is a floor, and FDA alone carries most of the total.
 
-The lane is carried by FDA recalls. FSIS is small but exact. Combined rate
-clears the bar without HAN contributing anything.
+Source notes:
+  HAN has no live feed — the tools.cdc.gov one is dead since 2023 while CDC
+  keeps publishing. Excluded here, ingested via crawl lane instead (ADR 3).
+  FSIS uses its recall API, not RSS: full archive plus field_states and
+  field_related_to_outbreak, which the corroboration join needs.
+  fda.gov and fsis.usda.gov 403 the default requests UA. Browser UA required.
 
-SOURCE DECISIONS THIS MEASUREMENT FORCED
-----------------------------------------
-  * CDC HAN — no working machine-readable feed exists. tools.cdc.gov/.../403372
-    returns nothing; www2c.cdc.gov/podcasts/createrss.asp?c=177 parses but is
-    ABANDONED (124 entries, none after 2023-09-01) while CDC has continued
-    issuing HANs through 2026. Reporting 0/30d from that feed would be reporting
-    a dead pipe as a signal. HAN therefore moves OUT of the event lane and INTO
-    the crawl lane (archive at cdc.gov/han/php/notices/index.html) — which is
-    exactly ADR 3's criterion: crawl only where data lives exclusively in pages.
-    It remains a low-rate, high-severity corroboration source, not a rate
-    contributor.
-  * USDA FSIS — the RSS feed is thin, but FSIS publishes a public recall API
-    (launched 2023) carrying the full archive with field_states,
-    field_recall_reason, and field_related_to_outbreak. Per ADR 3 (API where one
-    exists), FSIS is ingested via API. Those fields map directly onto the
-    corroboration mart's (disease, state, date-window) scoped join.
-  * User-agent — fda.gov and fsis.usda.gov both 403 the default python-requests
-    UA. Every extractor needs a browser UA. This belongs in a shared HTTP client
-    in phoms.extract, not repeated per script.
-
-HONEST CAVEAT FOR THE ADR
--------------------------
-4.9/wk is a lower bound from a single 30-day window. The FDA component is
-truncated and one source dominates the total. If FDA recalls were removed, the
-lane would not clear. Worth stating plainly rather than presenting 4.9 as a
-clean measurement.
+See docs/adr/002-event-lane.md.
 """
 import datetime
 from collections import Counter
@@ -102,7 +63,6 @@ def main():
     total = sum(counts.values())
     print(f"\nCOMBINED: {total}/30d = {total / WINDOW * 7:.1f} items/week")
     print("Gate: >= ~3/wk supports the broker (ADR 2).")
-    print("NOTE: FDA count is a floor. HAN excluded — no feed; crawl lane per ADR 3.")
 
 
 if __name__ == "__main__":

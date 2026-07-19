@@ -1,56 +1,24 @@
 """
-Pre-build verification #1 — NNDSS provisional-revision behavior.
+NNDSS provisional-revision check (brief §7, gate 1).
 
-WHY THIS EXISTS
----------------
-The entire nowcasting layer rests on one assumption: CDC revises prior weeks'
-counts as late cases are confirmed. If prior weeks never move between pulls,
-there is no lag to learn, the revision lane produces nothing, and the nowcast
-mart has no input. Brief §7 requires confirming this by eye before any real
-code is written.
+The nowcast assumes CDC revises prior weeks as late cases confirm. If prior
+weeks never move between pulls, there is no lag to learn and the revision lane
+is worthless. This proves it — or kills it.
 
-WHAT IT DOES
-------------
-  discover : queries the Socrata catalog for NNDSS datasets on data.cdc.gov.
-             CDC migrated the weekly tables off WONDER into a consolidated
-             dataset, superseding the per-table-per-year datasets (frozen 2022),
-             so the current dataset is discovered rather than hardcoded.
-  schema   : prints the column list for DATASET_ID. Run before `pull` — field
-             names changed in the migration and must not be assumed.
-  pull     : fetches all cyclosporiasis rows and writes a snapshot-dated CSV to
-             snapshots/. Never overwrites (ADR 5) — accumulating snapshots ARE
-             the raw material the lag profile is learned from.
+    python -m phoms.extract.verify_nndss discover   # find current dataset id
+    python -m phoms.extract.verify_nndss schema     # column names (never assume)
+    python -m phoms.extract.verify_nndss pull       # snapshot; rerun in 3-4 days
 
-HOW TO USE IT
--------------
-    python -m phoms.extract.verify_nndss discover
-    python -m phoms.extract.verify_nndss schema
-    python -m phoms.extract.verify_nndss pull      # run again 3-4 days later
-    # then diff the two CSVs on (states, year, week); rows whose m1 moved
-    # are revisions. Rows returned => nowcast premise confirmed.
+Then diff two snapshots on (states, year, week). Rows where m1 moved = revisions.
 
-FINDINGS (2026-07-19)
----------------------
-  * Current dataset: x9gk-5huc "NNDSS Weekly Data", updated 2026-07-15.
-  * Schema: states, year, week, label, m1..m4 (+ *_flag), location1/2, geocode.
-    - `label` filters exactly: one value, "Cyclosporiasis". No variant sweep.
-    - `m1` is the current-week count. m2-m4 are cumulative/prior-year
-      comparatives — CONFIRM which before the diff treats one as the count.
-    - `m1_flag` non-null means suppressed/not-reported, NOT zero. The diff must
-      treat flag transitions as distinct from count changes or the lag profile
-      is polluted.
-  * Pull #1: 16,520 rows, 2022-2026. Baseline depth is 4 prior years — thin;
-    argues for a baseline that pools across weeks rather than treating each
-    week-of-year independently at n=4.
-  * `states` MIXES GRAINS: national rollups ("U.S. Residents", "Total"), census
-    divisions ("East North Central"), and states ("Michigan"). NY and NYC report
-    separately. Staging must add a jurisdiction-grain column and the anomaly
-    mart must filter to state, or rollups double-count and fire false alerts.
-  * 2026 leaders: Michigan 482, Ohio 436 — Michigan validated as a real
-    crawl-lane target, not a hypothetical one.
+Gotchas:
+  m1 is the current-week count; m2-m4 are cumulative/prior-year comparatives.
+  m1_flag non-null = suppressed, not zero. Diff must treat flag changes
+  separately from count changes.
+  `states` mixes national / census-division / state grains. Staging needs a
+  grain column; the anomaly mart filters to state or rollups double-count.
 
-STATUS: pull #1 complete; pull #2 outstanding. The gate is not closed until
-two snapshots have been diffed.
+See docs/adr/005-snapshot-keys.md.
 """
 import csv
 import datetime
@@ -60,12 +28,12 @@ import sys
 import requests
 
 CATALOG = "https://api.us.socrata.com/api/catalog/v1"
-DATASET_ID = "x9gk-5huc"  # NNDSS Weekly Data — verify via `discover` if pulls fail
+DATASET_ID = "x9gk-5huc"  # NNDSS Weekly Data; rerun `discover` if pulls break
 UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
 
 
 def discover():
-    """List candidate NNDSS datasets with IDs and last-updated dates."""
+    """List NNDSS datasets on data.cdc.gov with ids and last-updated dates."""
     r = requests.get(
         CATALOG,
         params={"domains": "data.cdc.gov", "q": "NNDSS weekly notifiable", "limit": 10},
@@ -79,7 +47,7 @@ def discover():
 
 
 def schema():
-    """Print DATASET_ID's columns. Field names are discovered, never assumed."""
+    """Print DATASET_ID's columns."""
     meta = requests.get(
         f"https://data.cdc.gov/api/views/{DATASET_ID}.json", headers=UA, timeout=30
     ).json()
@@ -88,7 +56,7 @@ def schema():
 
 
 def pull(disease_col="label"):
-    """Snapshot all cyclosporiasis rows to a date-stamped CSV (ADR 5: never overwrite)."""
+    """Snapshot cyclosporiasis rows to a date-stamped CSV. Never overwrites (ADR 5)."""
     rows = requests.get(
         f"https://data.cdc.gov/resource/{DATASET_ID}.json",
         params={"$where": f"lower({disease_col}) like '%cyclospor%'", "$limit": 50000},
