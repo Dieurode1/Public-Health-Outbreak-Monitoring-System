@@ -1,5 +1,3 @@
-[README (14).md](https://github.com/user-attachments/files/30170002/README.14.md)
-<div align="center">
 
 # 🦠 Public Health Outbreak Monitoring System
 
