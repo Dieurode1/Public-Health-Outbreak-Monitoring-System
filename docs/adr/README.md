@@ -10,6 +10,9 @@
 | 006 | Multi-disease by design, disease-as-config | Brief |
 | 007 | Frozen payload contract; console and digest are peers | Brief |
 | [008](008-jurisdiction-grain.md) | Jurisdiction grain explicit; only states alert | Accepted |
+| [009](009-measure-type.md) | Counts carry measure_type; no cross-type comparison | Accepted |
+| [010](010-michigan-pdf-extraction.md) | Michigan is PDF extraction; Ohio disqualified (auth) | Accepted |
 
 ADRs 001, 004, 006, 007 are carried from the decision brief and written up as
-their implementations land. 002, 003, 005, 008 are backed by measurement.
+their implementations land. 002, 003, 005, 008, 009, 010 are backed by
+measurement or by what verification found in the sources themselves.
