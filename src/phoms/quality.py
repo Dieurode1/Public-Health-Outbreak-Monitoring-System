@@ -159,29 +159,76 @@ def check_grain_coverage(df: pd.DataFrame, known_states: set[str] | None = None)
     )
 
 
-def check_rollup_consistency(df: pd.DataFrame, tolerance: float = 0.05) -> CheckResult:
+def check_rollup_consistency(
+    df: pd.DataFrame, tolerance: float = 0.05, min_gap: float = 2
+) -> CheckResult:
     """
-    State-grain rows sum to roughly the national Total.
+    State-grain rows sum to roughly the national Total, WITHIN each (year, week).
 
-    Divergence means either the grain classification is wrong or CDC changed how
-    rollups are computed. Tolerance is loose by design: territories and
-    reporting-jurisdiction quirks (NY vs NYC) make exact equality unrealistic.
+    Compared per period, not in aggregate. An aggregate comparison passes
+    whenever both sides happen to span the same years, which hides two real
+    failures: a partial year on one side only, and a single week where a
+    jurisdiction's rows went missing (invisible inside a five-year sum).
+
+    Tolerance is loose by design: territories and reporting-jurisdiction quirks
+    (NY vs NYC) make exact equality unrealistic. Reports the worst period.
     """
-    if not {"states", "m1"} <= set(df.columns):
-        return CheckResult("rollup_consistency", False, "missing states or m1", {})
-    m1 = pd.to_numeric(df["m1"], errors="coerce").fillna(0)
-    grains = df["states"].map(classify_grain)
-    state_sum = m1[grains == "state"].sum()
-    norm = df["states"].map(normalize_jurisdiction)
-    total = m1[norm == "total"].sum()
-    if total == 0:
-        return CheckResult("rollup_consistency", True, "no Total rows to compare (skipped)", {})
-    drift = abs(state_sum - total) / total
+    if not {"states", "year", "week", "m1"} <= set(df.columns):
+        return CheckResult("rollup_consistency", False, "missing states/year/week/m1", {})
+
+    work = pd.DataFrame(
+        {
+            "year": pd.to_numeric(df["year"], errors="coerce"),
+            "week": pd.to_numeric(df["week"], errors="coerce"),
+            "m1": pd.to_numeric(df["m1"], errors="coerce").fillna(0),
+            "grain": df["states"].map(classify_grain),
+            "norm": df["states"].map(normalize_jurisdiction),
+        }
+    ).dropna(subset=["year", "week"])
+
+    # TOTAL includes non-US residents, who have no state. Add them to the state
+    # side or every period with a foreign-acquired case reads as a shortfall.
+    states = work[work.grain == "state"].groupby(["year", "week"])["m1"].sum()
+    non_us = work[work.norm == "non us residents"].groupby(["year", "week"])["m1"].sum()
+    totals = work[work.norm == "total"].groupby(["year", "week"])["m1"].sum()
+
+    both = pd.DataFrame({"states": states, "non_us": non_us, "total": totals})
+    both["states"] = both["states"].fillna(0)
+    both["non_us"] = both["non_us"].fillna(0)
+    both = both.dropna(subset=["total"])
+    both = both[both["total"] > 0]
+
+    if both.empty:
+        return CheckResult("rollup_consistency", True, "no comparable periods (skipped)", {})
+
+    both["expected"] = both["states"] + both["non_us"]
+    both["gap"] = (both["expected"] - both["total"]).abs()
+    both["drift"] = both["gap"] / both["total"]
+
+    # A percentage is meaningless at single-digit counts: one case against a
+    # total of 3 is 33% drift and means nothing. Require BOTH a relative and an
+    # absolute miss before failing.
+    both["fails"] = (both["drift"] > tolerance) & (both["gap"] > min_gap)
+    worst = both["drift"].idxmax()
+    worst_drift = float(both.loc[worst, "drift"])
+    worst_gap = float(both.loc[worst, "gap"])
+    failing = both[both["fails"]]
+
     return CheckResult(
         "rollup_consistency",
-        drift <= tolerance,
-        f"states={state_sum:.0f} vs total={total:.0f} ({drift:.1%} drift)",
-        {"state_sum": float(state_sum), "total": float(total), "drift": float(drift)},
+        failing.empty,
+        f"{len(both)} periods checked, worst {worst_drift:.1%} "
+        f"({worst_gap:.0f} cases) at {int(worst[0])}w{int(worst[1])}"
+        if failing.empty
+        else f"{len(failing)}/{len(both)} periods over tolerance, worst {worst_drift:.1%} "
+        f"({worst_gap:.0f} cases) at {int(worst[0])}w{int(worst[1])}",
+        {
+            "periods_checked": len(both),
+            "periods_failing": len(failing),
+            "worst_period": [int(worst[0]), int(worst[1])],
+            "worst_drift": worst_drift,
+            "worst_gap": worst_gap,
+        },
     )
 
 
