@@ -10,3 +10,10 @@ dbt/logs/
 console/node_modules/
 console/.next/
 .pytest_cache/
+# Terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/.terraform.lock.hcl
+infra/*.tfvars
+!infra/*.tfvars.example
